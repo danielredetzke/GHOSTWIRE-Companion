@@ -285,7 +285,7 @@ struct UserEditView: View {
             .confirmationDialog("Reset two-step sign-in?", isPresented: $confirmResetMFA, titleVisibility: .visible) {
                 Button("Reset", role: .destructive) { Task { await resetMFA() } }
             } message: {
-                Text("The authenticator app, security keys, passkeys and recovery codes of \(user.username) are removed.")
+                Text("The authenticator app, passkeys and recovery codes of \(user.username) are removed.")
             }
             .confirmationDialog("Delete \(user.username)?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete user", role: .destructive) { Task { await delete() } }
