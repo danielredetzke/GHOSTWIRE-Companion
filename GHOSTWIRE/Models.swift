@@ -257,6 +257,11 @@ nonisolated struct StatsSettings: Codable, Equatable {
     var geoip: Bool?
 }
 
+nonisolated struct DecoySettings: Codable, Equatable {
+    var enabled: Bool
+    var page: String
+}
+
 nonisolated struct GeoStatus: Decodable {
     let enabled: Bool
     let updated: Date?
@@ -266,6 +271,7 @@ nonisolated struct AppSettings: Decodable {
     var web: WebSettings
     var log: LogSettings
     var stats: StatsSettings
+    var decoy: DecoySettings? // nil on servers without the decoy
     var adminUsername: String
     var fingerprint: String
     var logPath: String

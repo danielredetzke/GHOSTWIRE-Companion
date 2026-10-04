@@ -6,12 +6,14 @@ struct SettingsView: View {
     @State private var web: WebSettings?
     @State private var log: LogSettings?
     @State private var stats: StatsSettings?
+    @State private var decoy: DecoySettings?
     @State private var error: String?
     @State private var busy = false
     @State private var offerRestart = false
     @State private var confirmRestart = false
     @State private var confirmShrink = false
     @State private var confirmDisconnect = false
+    @State private var confirmDecoy = false
 
     private static let hourly: [(Int, String)] = [(24, "1 day"), (48, "2 days"), (168, "7 days"), (336, "14 days"), (744, "31 days")]
     private static let daily: [(Int, String)] = [(30, "30 days"), (90, "90 days"), (180, "6 months"), (400, "13 months"),
@@ -25,6 +27,7 @@ struct SettingsView: View {
                     Section { Text(error).foregroundStyle(Color.gwErrInk) }
                 }
                 if web != nil { webSection }
+                if decoy != nil { decoySection }
                 if log != nil, stats != nil { retentionSection }
                 if log != nil { logSection }
                 Section {
@@ -52,6 +55,11 @@ struct SettingsView: View {
                 Button("Save and delete", role: .destructive) { Task { await saveRetention() } }
             } message: {
                 Text("The new limits are lower: older log files and traffic history beyond them are deleted. This cannot be undone.")
+            }
+            .confirmationDialog("Turn on Decoy?", isPresented: $confirmDecoy, titleVisibility: .visible) {
+                Button("Turn on", role: .destructive) { Task { await saveDecoy(enabled: true) } }
+            } message: {
+                Text("The web interface disappears right away and the server shows the decoy page instead. Turn it off here to get it back.")
             }
             .confirmationDialog("Disconnect this iPhone?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
                 Button("Disconnect", role: .destructive) { session.disconnect() }
@@ -127,6 +135,31 @@ struct SettingsView: View {
         .autocorrectionDisabled()
     }
 
+    private var decoySection: some View {
+        Section {
+            Toggle("Decoy", isOn: Binding(get: { decoy!.enabled }, set: { on in
+                if on {
+                    confirmDecoy = true
+                } else {
+                    Task { await saveDecoy(enabled: false) }
+                }
+            }))
+            .disabled(busy)
+            Picker("Decoy page", selection: Binding(get: { decoy!.page }, set: { page in
+                Task { await saveDecoy(page: page) }
+            })) {
+                Text("nginx").tag("nginx")
+                Text("Apache").tag("apache")
+                Text("Coming soon").tag("soon")
+            }
+            .disabled(busy)
+        } header: {
+            Text("Decoy")
+        } footer: {
+            Text("Shows an ordinary web server page instead of the web interface. This app and setup links keep working. Applies immediately.")
+        }
+    }
+
     private var retentionSection: some View {
         let l = Binding(get: { log! }, set: { log = $0 })
         let s = Binding(get: { stats! }, set: { stats = $0 })
@@ -194,6 +227,7 @@ struct SettingsView: View {
             web = s.web
             log = s.log
             stats = s.stats
+            decoy = s.decoy
             error = nil
         } catch {
             self.error = session.message(for: error)
@@ -243,6 +277,22 @@ struct SettingsView: View {
         do {
             _ = try await patch(["log": encoded(l)])
             settings?.log.level = level
+        } catch {
+            self.error = session.message(for: error)
+        }
+    }
+
+    private func saveDecoy(enabled: Bool? = nil, page: String? = nil) async {
+        guard var d = decoy else { return }
+        if let enabled { d.enabled = enabled }
+        if let page { d.page = page }
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await patch(["decoy": encoded(d)])
+            decoy = d
+            settings?.decoy = d
+            error = nil
         } catch {
             self.error = session.message(for: error)
         }
