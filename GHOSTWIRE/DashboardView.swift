@@ -5,6 +5,7 @@ struct DashboardView: View {
     @State private var status: Status?
     @State private var peers: [Peer] = []
     @State private var points: [StatPoint] = []
+    @State private var activity: [ActivityLine]?
     @State private var error: String?
 
     var body: some View {
@@ -86,6 +87,44 @@ struct DashboardView: View {
             }
         }
         .card()
+
+        if let activity {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    SectionTitle(text: "Recent activity")
+                    Spacer()
+                    NavigationLink("Log") { LogView() }.font(.subheadline)
+                }
+                .padding(.bottom, 8)
+                if activity.isEmpty {
+                    Text("No changes yet.").font(.footnote).foregroundStyle(Color.gwText2).padding(.vertical, 8)
+                }
+                ForEach(activity) { a in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(fmtWhen(a.time))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Color.gwText2)
+                            .frame(width: 52, alignment: .leading)
+                        Text(a.text).font(.footnote)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 7)
+                    .accessibilityElement(children: .combine)
+                    if a.id != activity.last?.id { Divider() }
+                }
+            }
+            .card()
+        }
+    }
+
+    /// The latest audit entries: who changed what.
+    private func loadActivity(_ api: API) async throws -> [ActivityLine] {
+        let data = try await api.data("GET", "/logs?audit=1&limit=6")
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return (obj?["lines"] as? [[String: Any]] ?? []).enumerated().compactMap { i, rec in
+            guard let t = rec["time"] as? String, let time = parseGoDate(t) else { return nil }
+            return ActivityLine(id: i, time: time, text: describeAudit(rec))
+        }
     }
 
     private func load() async {
@@ -99,8 +138,33 @@ struct DashboardView: View {
             peers = b.peers
             points = c.points
             error = nil
+            activity = try? await loadActivity(api)
         } catch {
             self.error = session.message(for: error)
         }
     }
+}
+
+struct ActivityLine: Identifiable {
+    let id: Int
+    let time: Date
+    let text: String
+}
+
+/// "Peer created: phone · dan", like the web dashboard.
+func describeAudit(_ rec: [String: Any]) -> String {
+    let msg = rec["msg"] as? String ?? ""
+    var s = msg.prefix(1).uppercased() + msg.dropFirst()
+    if let p = rec["peer"] as? String { s += ": " + p }
+    if let t = rec["token"] as? String { s += ": " + t }
+    if let f = rec["fields"] as? [String], !f.isEmpty { s += " (" + f.joined(separator: ", ") + ")" }
+    return s + " · " + (rec["actor"] as? String ?? "")
+}
+
+/// Time today, "Yest." or a short date, like the web dashboard.
+func fmtWhen(_ d: Date) -> String {
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return d.formatted(date: .omitted, time: .shortened) }
+    if cal.isDateInYesterday(d) { return "Yest." }
+    return d.formatted(.dateTime.day().month(.abbreviated))
 }

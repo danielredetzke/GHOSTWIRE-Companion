@@ -208,6 +208,7 @@ struct PeerEditView: View {
     @State private var name = ""
     @State private var note = ""
     @State private var ipv4 = ""
+    @State private var latencyCheck = "off"
     @State private var overrides = PeerOverrides()
     @State private var error: String?
     @State private var busy = false
@@ -226,6 +227,14 @@ struct PeerEditView: View {
                 }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+
+                Section {
+                    Picker("Latency check", selection: $latencyCheck) {
+                        ForEach(LatencyCheck.options, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                } footer: {
+                    Text(LatencyCheck.hint(latencyCheck))
+                }
 
                 OverrideSections(o: $overrides, server: server)
 
@@ -251,6 +260,7 @@ struct PeerEditView: View {
                 name = peer.name
                 note = peer.note
                 ipv4 = peer.ipv4
+                latencyCheck = peer.latencyCheck
                 overrides = PeerOverrides(peer: peer, server: server)
             }
         }
@@ -266,6 +276,7 @@ struct PeerEditView: View {
             body["name"] = name
             body["note"] = note
             body["ipv4"] = ipv4.trimmingCharacters(in: .whitespaces)
+            body["latencyCheck"] = latencyCheck
             let r: PeerResult = try await api.send("PATCH", "/peers/\(peer.id)", body)
             session.reportApply(r.applyError)
             dismiss()

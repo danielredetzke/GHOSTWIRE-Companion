@@ -8,6 +8,7 @@ struct PeerDetailView: View {
     @State private var server: ServerConfig?
     @State private var range = "7d"
     @State private var points: [StatPoint] = []
+    @State private var latency: [LatencyPoint] = []
     @State private var error: String?
     @State private var issuing = false
     @State private var issueWithLink = false
@@ -28,6 +29,7 @@ struct PeerDetailView: View {
                     header(p)
                     if let s = p.setup { setupLink(p, s) }
                     traffic
+                    if showLatency(p) { latencyCard }
                     connection(p)
                     history.id("history")
                     clientConfig(p)
@@ -112,6 +114,26 @@ struct PeerDetailView: View {
         .card()
     }
 
+    private func showLatency(_ p: Peer) -> Bool { p.latencyCheck != "off" || p.stats.latency != nil }
+
+    private var latencyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle(text: "Latency · last 24 hours")
+            LatencyChart(points: latency)
+        }
+        .card()
+    }
+
+    private func latencyText(_ p: Peer) -> String {
+        guard let l = p.stats.latency else {
+            if p.latencyCheck == "off" { return "Check off" }
+            return p.latencyCheck == "active" ? "Not measured yet · pinged only while the device sends traffic" : "Not measured yet"
+        }
+        let when = latencyStale(l) || p.latencyCheck == "off" ? " · measured " + ago(l.at) : ""
+        guard let ms = l.ms else { return "No ping reply" + when }
+        return "\(fmtMs(ms)) median · \(fmtMs(l.min))–\(fmtMs(l.max)) · \(l.loss) % loss" + when
+    }
+
     private func connection(_ p: Peer) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(text: "Connection")
@@ -119,6 +141,7 @@ struct PeerDetailView: View {
             KV(key: "Endpoint", value: p.stats.endpoint.isEmpty ? "–" : p.stats.endpoint, mono: true)
             KV(key: "Location", value: p.stats.location?.label.isEmpty == false ? p.stats.location!.label : "–")
             KV(key: "Latest handshake", value: ago(p.stats.lastHandshake))
+            KV(key: "Latency", value: latencyText(p))
             KV(key: "Public key", value: p.publicKey.isEmpty ? "–" : p.publicKey, mono: true)
             KV(key: "Preshared key", value: p.hasPresharedKey ? "Set" : "None")
             KV(key: "All-time traffic", value: "Download \(fmtBytes(p.stats.downTotal)) · Upload \(fmtBytes(p.stats.upTotal))")
@@ -212,6 +235,7 @@ struct PeerDetailView: View {
             }
             KV(key: "AllowedIPs (client)", value: p.effectiveAllowedIPs.joined(separator: ", ") + (p.allowedIPs == nil ? " · server default" : ""), mono: true)
             KV(key: "DNS", value: (p.effectiveDNS.isEmpty ? "none" : p.effectiveDNS.joined(separator: ", ")) + (p.dns == nil ? " · server default" : ""), mono: true)
+            KV(key: "Latency check", value: LatencyCheck.options.first { $0.0 == p.latencyCheck }?.1 ?? p.latencyCheck)
             KV(key: "Persistent keepalive", value: (p.effectiveKeepalive > 0 ? "\(p.effectiveKeepalive) s" : "off") + (p.keepalive == nil ? " · server default" : ""))
         }
         .card()
@@ -225,6 +249,7 @@ struct PeerDetailView: View {
             (peer, server) = try await (p, s)
             error = nil
             await loadStats()
+            if let p = peer, showLatency(p), let r: LatencyResponse = try? await api.get("/peers/\(peerID)/latency") { latency = r.points }
             if let r: SessionsResponse = try? await api.get("/peers/\(peerID)/sessions?limit=100") { sessions = r.sessions }
         } catch {
             self.error = session.message(for: error)

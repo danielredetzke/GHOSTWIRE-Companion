@@ -10,7 +10,17 @@ struct PeerRow: View {
         let up = period == .day ? peer.stats.up24h : peer.stats.up30d
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(peer.name).font(.body.weight(.semibold)).foregroundStyle(Color.gwText)
+                HStack(spacing: 6) {
+                    Text(peer.name).font(.body.weight(.semibold)).foregroundStyle(Color.gwText)
+                    if let cc = peer.stats.location?.country, !cc.isEmpty {
+                        Text(cc)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.gwText2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.gwBadge, in: RoundedRectangle(cornerRadius: 4))
+                            .accessibilityLabel(peer.stats.location?.label ?? cc)
+                    }
+                }
                 if !peer.note.isEmpty {
                     Text(peer.note).font(.caption).foregroundStyle(Color.gwText2).lineLimit(1)
                 }
@@ -20,9 +30,9 @@ struct PeerRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text("↓ " + fmtBytes(down)).font(.footnote.monospacedDigit())
                 Text("↑ " + fmtBytes(up)).font(.footnote.monospacedDigit()).foregroundStyle(Color.gwText2)
+                LatencyBadge(peer: peer)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Download \(fmtBytes(down)), upload \(fmtBytes(up))")
+            .accessibilityElement(children: .combine)
         }
         .padding(.vertical, 8)
         .contentShape(Rectangle())

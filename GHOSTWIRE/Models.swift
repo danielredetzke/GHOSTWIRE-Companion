@@ -62,6 +62,7 @@ nonisolated struct PeerStats: Decodable, Hashable {
     let endpoint: String
     let down24h, up24h, down30d, up30d, downTotal, upTotal: Int64
     let location: GeoInfo?
+    let latency: LatencyView?  // nil = never pinged
 }
 
 /// Country and network of an address, from the server's DB-IP lookup.
@@ -110,6 +111,7 @@ nonisolated struct Peer: Decodable, Identifiable, Hashable {
     let effectiveDNS: [String]
     let effectiveAllowedIPs: [String]
     let effectiveKeepalive: Int
+    let latencyCheck: String    // off | active | always
     let created: Date
     let configIssued: Date?
     let setup: SetupInfo?       // pending setup link, nil if none
