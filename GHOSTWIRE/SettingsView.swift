@@ -26,6 +26,13 @@ struct SettingsView: View {
                 if let error {
                     Section { Text(error).foregroundStyle(Color.gwErrInk) }
                 }
+                Section {
+                    NavigationLink("My account") { AccountView() }
+                    NavigationLink("Users") { UsersView() }
+                    NavigationLink("API tokens") { TokensView() }
+                } header: {
+                    Text("Access")
+                }
                 if web != nil { webSection }
                 if decoy != nil { decoySection }
                 if log != nil, stats != nil { retentionSection }
@@ -33,7 +40,7 @@ struct SettingsView: View {
                 Section {
                     Button("Restart service…") { confirmRestart = true }
                 } footer: {
-                    Text("Password, API tokens and backups are managed in the web interface.")
+                    Text("Backups are made in the web interface.")
                 }
             }
             .groundBackground()
