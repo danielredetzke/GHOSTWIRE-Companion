@@ -23,14 +23,12 @@ nonisolated struct UserInfo: Decodable, Identifiable, Hashable {
 /// A user's two-step sign-in methods.
 nonisolated struct MFASummary: Decodable, Hashable {
     let totp: Bool
-    let keys: Int
     let passkeys: Int
 
-    /// "App, 1 key" or "" when off.
+    /// "App, 1 passkey" or "" when off.
     var text: String {
         var parts: [String] = []
         if totp { parts.append("App") }
-        if keys > 0 { parts.append(keys == 1 ? "1 key" : "\(keys) keys") }
         if passkeys > 0 { parts.append(passkeys == 1 ? "1 passkey" : "\(passkeys) passkeys") }
         return parts.joined(separator: ", ")
     }
