@@ -158,6 +158,9 @@ struct SettingsView: View {
                 Text("nginx").tag("nginx")
                 Text("Apache").tag("apache")
                 Text("Coming soon").tag("soon")
+                Text("Blank page").tag("blank")
+                Text("Forbidden").tag("forbidden")
+                Text("Private server").tag("private")
             }
             .disabled(busy)
         } header: {
