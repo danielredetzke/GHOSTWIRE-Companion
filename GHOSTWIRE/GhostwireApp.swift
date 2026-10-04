@@ -4,6 +4,8 @@ import SwiftUI
 struct GhostwireApp: App {
     @State private var session = AppSession()
 
+    init() { BrandFont.register() }
+
     var body: some Scene {
         WindowGroup {
             RootView()

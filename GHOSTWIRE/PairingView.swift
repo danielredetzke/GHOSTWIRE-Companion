@@ -13,10 +13,10 @@ struct PairingView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            KamonMark(size: 96)
+            HannyaMark(size: 96)
             VStack(spacing: 6) {
-                Text("GHOSTWIRE").font(.system(size: 30, weight: .semibold, design: .monospaced)).tracking(1)
-                Text("ゴーストワイヤー").font(.footnote).tracking(4).foregroundStyle(Color.gwText2)
+                Text("GHOSTWIRE").font(BrandFont.font(30)).tracking(30 * 0.16)
+                Text("ゴーストワイヤー").font(BrandFont.font(13)).tracking(13 * 0.32).foregroundStyle(Color.gwText2)
             }
             Text("In the web interface, open **Settings → Pair iOS app** and scan the QR code shown there.")
                 .multilineTextAlignment(.center)

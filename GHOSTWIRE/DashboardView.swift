@@ -23,7 +23,7 @@ struct DashboardView: View {
             .background(Color.gwGround)
             .navigationTitle("Dashboard")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { KamonMark(size: 30) }
+                ToolbarItem(placement: .topBarLeading) { HannyaMark(size: 30) }
             }
             .navigationDestination(for: String.self) { PeerDetailView(peerID: $0) }
             .refreshable { await load() }
