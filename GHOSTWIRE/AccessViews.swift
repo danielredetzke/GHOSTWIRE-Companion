@@ -17,6 +17,23 @@ nonisolated struct UserInfo: Decodable, Identifiable, Hashable {
     let lastLogin: LastUse?
     let tokens: Int
     let you: Bool
+    let mfa: MFASummary?  // nil on servers without two-step sign-in
+}
+
+/// A user's two-step sign-in methods.
+nonisolated struct MFASummary: Decodable, Hashable {
+    let totp: Bool
+    let keys: Int
+    let passkeys: Int
+
+    /// "App, 1 key" or "" when off.
+    var text: String {
+        var parts: [String] = []
+        if totp { parts.append("App") }
+        if keys > 0 { parts.append(keys == 1 ? "1 key" : "\(keys) keys") }
+        if passkeys > 0 { parts.append(passkeys == 1 ? "1 passkey" : "\(passkeys) passkeys") }
+        return parts.joined(separator: ", ")
+    }
 }
 
 nonisolated struct UsersResponse: Decodable {
@@ -66,6 +83,7 @@ struct UsersView: View {
     @State private var error: String?
     @State private var adding = false
     @State private var editing: UserInfo?
+    @State private var required: Bool?
 
     var body: some View {
         List {
@@ -83,6 +101,13 @@ struct UsersView: View {
                 }
             } footer: {
                 Text("Everyone here is an admin. You cannot delete yourself, so one user always remains. Change your own details under My account.")
+            }
+            if let required {
+                Section {
+                    Toggle("Require two-step sign-in", isOn: Binding(get: { required }, set: { on in Task { await setRequired(on) } }))
+                } footer: {
+                    Text("Users without it set it up right after their next sign-in in the browser. Methods are added in the web interface under My account. This app is not affected.")
+                }
             }
         }
         .groundBackground()
@@ -112,6 +137,9 @@ struct UsersView: View {
                 }
             }
             if !u.note.isEmpty { Text(u.note).font(.caption).foregroundStyle(Color.gwText2) }
+            if let m = u.mfa {
+                Text("Two-step sign-in: " + (m.text.isEmpty ? "off" : m.text)).font(.caption).foregroundStyle(Color.gwText2)
+            }
             Text("Last sign-in: \(u.lastLogin.map { "\(ago($0.at)) · \($0.ip)" } ?? "not since restart") · \(u.tokens) app token\(u.tokens == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(Color.gwText2)
@@ -124,6 +152,7 @@ struct UsersView: View {
         do {
             let r: UsersResponse = try await api.get("/users")
             users = r.users
+            if let s: SignInSettings = try? await api.get("/settings"), let si = s.signin { required = si.requireMfa }
             error = nil
         } catch {
             self.error = session.message(for: error)
@@ -200,6 +229,7 @@ struct UserEditView: View {
     @State private var newPassword = ""
     @State private var resetMustChange = true
     @State private var confirmDelete = false
+    @State private var confirmResetMFA = false
     @State private var error: String?
     @State private var busy = false
 
@@ -222,6 +252,16 @@ struct UserEditView: View {
                 } footer: {
                     Text("Signs \(user.username) out everywhere. App tokens keep working.")
                 }
+                if let m = user.mfa, !m.text.isEmpty {
+                    Section {
+                        LabeledContent("Methods", value: m.text)
+                        Button("Reset two-step sign-in…", role: .destructive) { confirmResetMFA = true }.disabled(busy)
+                    } header: {
+                        Text("Two-step sign-in")
+                    } footer: {
+                        Text("For a lost phone or key. \(user.username) then signs in with their password and sets it up again.")
+                    }
+                }
                 Section {
                     Button("Delete user…", role: .destructive) { confirmDelete = true }
                 } footer: {
@@ -241,6 +281,11 @@ struct UserEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }.disabled(busy || username.isEmpty)
                 }
+            }
+            .confirmationDialog("Reset two-step sign-in?", isPresented: $confirmResetMFA, titleVisibility: .visible) {
+                Button("Reset", role: .destructive) { Task { await resetMFA() } }
+            } message: {
+                Text("The authenticator app, security keys, passkeys and recovery codes of \(user.username) are removed.")
             }
             .confirmationDialog("Delete \(user.username)?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete user", role: .destructive) { Task { await delete() } }
@@ -284,6 +329,19 @@ struct UserEditView: View {
         }
     }
 
+    private func resetMFA() async {
+        guard let api = session.api else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let _: OKResult = try await api.send("POST", "/users/\(user.id)/reset-mfa")
+            session.alert = "Two-step sign-in of \(user.username) reset."
+            dismiss()
+        } catch {
+            self.error = session.message(for: error)
+        }
+    }
+
     private func delete() async {
         guard let api = session.api else { return }
         busy = true
@@ -291,6 +349,23 @@ struct UserEditView: View {
         do {
             let _: OKResult = try await api.send("DELETE", "/users/\(user.id)")
             dismiss()
+        } catch {
+            self.error = session.message(for: error)
+        }
+    }
+}
+
+nonisolated struct SignInSettings: Decodable {
+    struct Rules: Decodable { let requireMfa: Bool }
+    let signin: Rules?
+}
+
+extension UsersView {
+    func setRequired(_ on: Bool) async {
+        guard let api = session.api else { return }
+        do {
+            let _: SettingsResult = try await api.send("PATCH", "/settings", ["signin": ["requireMfa": on]])
+            required = on
         } catch {
             self.error = session.message(for: error)
         }
