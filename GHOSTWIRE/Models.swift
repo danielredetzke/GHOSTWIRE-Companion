@@ -274,7 +274,6 @@ nonisolated struct AppSettings: Decodable {
     var log: LogSettings
     var stats: StatsSettings
     var decoy: DecoySettings? // nil on servers without the decoy
-    var adminUsername: String
     var fingerprint: String
     var logPath: String
     var geo: GeoStatus?

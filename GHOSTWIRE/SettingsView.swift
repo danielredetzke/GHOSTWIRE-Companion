@@ -26,13 +26,6 @@ struct SettingsView: View {
                 if let error {
                     Section { Text(error).foregroundStyle(Color.gwErrInk) }
                 }
-                Section {
-                    NavigationLink("My account") { AccountView() }
-                    NavigationLink("Users") { UsersView() }
-                    NavigationLink("API tokens") { TokensView() }
-                } header: {
-                    Text("Access")
-                }
                 if web != nil { webSection }
                 if decoy != nil { decoySection }
                 if log != nil, stats != nil { retentionSection }
@@ -40,7 +33,7 @@ struct SettingsView: View {
                 Section {
                     Button("Restart service…") { confirmRestart = true }
                 } footer: {
-                    Text("Backups are made in the web interface.")
+                    Text("Users, API tokens, two-step sign-in and backups are managed in the web interface.")
                 }
             }
             .groundBackground()
@@ -71,7 +64,7 @@ struct SettingsView: View {
             .confirmationDialog("Disconnect this iPhone?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
                 Button("Disconnect", role: .destructive) { session.disconnect() }
             } message: {
-                Text("The token is removed from this iPhone. Revoke it under Settings → API tokens in the web interface too.")
+                Text("The token is removed from this iPhone. Revoke it in the web interface too.")
             }
         }
     }
