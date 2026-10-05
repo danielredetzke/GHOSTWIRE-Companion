@@ -62,21 +62,6 @@ From the command line:
 xcodebuild -scheme GHOSTWIRE -destination 'generic/platform=iOS Simulator' build
 ```
 
-## Releasing
-
-`release.sh` archives a Release build and uploads it to App Store Connect,
-where it shows up in TestFlight after processing. Xcode must be signed in to
-the Apple developer account.
-
-```sh
-TEAM_ID=ABCDE12345 ./release.sh            # archive and upload
-TEAM_ID=ABCDE12345 ./release.sh --export   # archive and export an .ipa only
-```
-
-The build number is the current date and time, so every upload is unique.
-`AppStore/` holds the App Store listing text (`metadata.md`) and the
-screenshots.
-
 ## Project layout
 
 All sources are in `GHOSTWIRE/`, one SwiftUI target with default main-actor
@@ -95,8 +80,13 @@ isolation:
 | `PairingView.swift` | QR and manual pairing |
 | `Theme.swift`, `Logo.swift`, `Format.swift` | colors, fonts, logo, formatting |
 
-The wordmark font, Shippori Mincho B1, is bundled under the SIL Open Font
-License; see `OFL-ShipporiMincho.txt`.
+`AppStore/` holds the App Store listing text (`metadata.md`) and the
+screenshots.
+
+## License
+
+MIT, see `LICENSE`. The wordmark font, Shippori Mincho B1, is bundled under
+the SIL Open Font License; see `OFL-ShipporiMincho.txt`.
 
 WireGuard is a registered trademark of Jason A. Donenfeld. GHOSTWIRE is not
 affiliated with or endorsed by the WireGuard project.
