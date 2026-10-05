@@ -70,17 +70,19 @@ struct ServerView: View {
 
     private var form: some View {
         Form {
-            Section("Health") {
-                ForEach(checks, id: \.self) { c in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Circle().fill(c.ok ? Color.gwGood : Color.gwBad).frame(width: 8, height: 8)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(c.name).font(.subheadline.weight(.medium))
-                            Text(c.detail).font(.caption).foregroundStyle(Color.gwText2)
-                        }
+            if !checks.isEmpty {
+                let health = HealthParts(checks)
+                Section {
+                    HealthGrid(parts: health)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                } header: {
+                    HStack {
+                        Text("Health")
+                        Spacer()
+                        Text(health.summary)
+                            .foregroundStyle(health.failing > 0 ? Color.gwErrInk : Color.gwText2)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel((c.ok ? "OK: " : "Problem: ") + c.name + ", " + c.detail)
                 }
             }
 
