@@ -69,13 +69,13 @@ nonisolated struct HealthParts {
                     t.raw = c.detail.replacing(#/ (present|missing)$/#, with: "")
                     t.problem = nil
                 }
-            case "Last apply":
+            case "Kernel in sync":
                 if c.ok {
                     let iso = c.detail.hasPrefix("applied ") ? String(c.detail.dropFirst(8)) : c.detail
                     t.applied = try? Date(iso, strategy: .iso8601)
                     t.status = c.detail
                 } else {
-                    t.status = "Failed"
+                    t.status = "Out of sync"
                 }
             case "Latency check":
                 t.status = c.ok ? "Tunnel ping works" : "Failing"
