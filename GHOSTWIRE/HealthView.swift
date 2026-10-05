@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The Health card's parts, made from the server's checks the same way the
 /// web interface does: the public address per IP family (from its uplink and
-/// public address checks), then one tile per other check with a plain-word
-/// status, the raw setting and, when it fails, what is wrong.
+/// public address checks) and, beside them, one row per other check with a
+/// plain-word status, the raw setting and, when it fails, what is wrong.
 nonisolated struct HealthParts {
     struct Address: Hashable {
         let label: String
@@ -94,16 +94,30 @@ nonisolated struct HealthParts {
     }
 }
 
+/// Addresses beside the checks when there is room (iPad), stacked above
+/// them otherwise.
 struct HealthGrid: View {
     let parts: HealthParts
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        VStack(spacing: 10) {
-            ForEach(parts.addresses, id: \.self) { AddressTile(address: $0) }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10, alignment: .top),
-                                GridItem(.flexible(), spacing: 10, alignment: .top)], spacing: 10) {
-                ForEach(parts.tiles, id: \.self) { CheckTile(tile: $0) }
+        if sizeClass == .regular {
+            HStack(alignment: .top, spacing: 12) {
+                addresses.frame(maxWidth: 380, maxHeight: .infinity)
+                CheckList(tiles: parts.tiles, wide: true).frame(maxWidth: .infinity)
             }
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            VStack(spacing: 10) {
+                addresses
+                CheckList(tiles: parts.tiles, wide: false)
+            }
+        }
+    }
+
+    private var addresses: some View {
+        VStack(spacing: sizeClass == .regular ? 12 : 10) {
+            ForEach(parts.addresses, id: \.self) { AddressTile(address: $0) }
         }
     }
 }
@@ -134,7 +148,7 @@ private struct AddressTile: View {
             }
             valueText.textSelection(.enabled)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(a.ok ? Color.gwSurface : Color.gwErrBg, in: .rect(cornerRadius: 10))
@@ -144,32 +158,63 @@ private struct AddressTile: View {
     }
 }
 
-private struct CheckTile: View {
+/// The checks as rows in one bordered list.
+private struct CheckList: View {
+    let tiles: [HealthParts.Tile]
+    let wide: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(tiles.enumerated()), id: \.element) { i, t in
+                if i > 0 { Rectangle().fill(Color.gwLine).frame(height: 1) }
+                CheckRow(tile: t, wide: wide)
+            }
+        }
+        .background(Color.gwSurface, in: .rect(cornerRadius: 10))
+        .clipShape(.rect(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.gwLine))
+    }
+}
+
+/// One check: name, then the status with its raw setting right after it. On
+/// a wide layout the name has its own column; otherwise it sits above.
+private struct CheckRow: View {
     let tile: HealthParts.Tile
+    let wide: Bool
 
     var body: some View {
         let t = tile
         let status = t.applied.map { ago($0) } ?? t.status
-        let border: Color = t.ok ? Color.gwLine : Color.gwErrInk.opacity(0.35)
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(t.label).font(.caption).foregroundStyle(Color.gwText2)
-                Spacer(minLength: 0)
-                Circle().fill(t.ok ? Color.gwGood : Color.gwBad).frame(width: 8, height: 8)
-            }
+        let name = Text(t.label).font(.caption).foregroundStyle(Color.gwText2)
+        let value = HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(status).font(.subheadline.weight(.medium))
                 .foregroundStyle(t.ok ? Color.gwText : Color.gwErrInk)
             if let raw = t.raw {
                 Text(raw).font(.mono(.caption2)).foregroundStyle(Color.gwText2)
             }
-            if let p = t.problem {
-                Text(p).font(.caption).foregroundStyle(Color.gwErrInk)
-            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(12)
-        .background(t.ok ? Color.gwSurface : Color.gwErrBg, in: .rect(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(border))
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Circle().fill(t.ok ? Color.gwGood : Color.gwBad).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 3) {
+                if wide {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        name.frame(width: 170, alignment: .leading)
+                        value
+                    }
+                } else {
+                    name
+                    value
+                }
+                if let p = t.problem {
+                    Text(p).font(.caption).foregroundStyle(Color.gwErrInk)
+                        .padding(.leading, wide ? 182 : 0)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(t.ok ? Color.clear : Color.gwErrBg)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(spoken(t.ok, [t.label, status, t.raw, t.problem]))
     }
