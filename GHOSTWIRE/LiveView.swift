@@ -19,6 +19,7 @@ struct LiveView: View {
     @State private var points: [SpeedPoint] = []
     @State private var step = 2
     @State private var size = 60
+    @State private var arrived: Date? // when the newest step came in live
     @State private var paused = false
     @State private var error: String?
 
@@ -82,6 +83,7 @@ struct LiveView: View {
                     step = m.step
                     size = m.size
                     points = first ? m.points : Array((points + m.points).suffix(m.size + 1))
+                    arrived = first ? nil : Date()
                     first = false
                     retry = 0
                     error = nil
@@ -129,7 +131,7 @@ struct LiveView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            LiveChart(points: points, step: step, size: size)
+            LiveChart(points: points, step: step, size: size, arrived: arrived, paused: paused)
         }
         .card()
     }
@@ -212,12 +214,18 @@ struct LiveView: View {
 }
 
 /// Download and upload of all peers as lines over light areas, the newest
-/// step at the right edge. Touch the chart to read a step.
+/// step at the right edge. Like the web interface, a new step enters just
+/// beyond the right edge and the chart slides left by one step over the
+/// step's length, so it moves steadily instead of jumping. Touch the chart
+/// to read a step.
 struct LiveChart: View {
     let points: [SpeedPoint]
     let step: Int
     let size: Int
+    let arrived: Date?
+    let paused: Bool
     @State private var selected: Date?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct Sample: Identifiable {
         let date: Date
@@ -226,12 +234,23 @@ struct LiveChart: View {
         var id: Date { date }
     }
 
+    private var still: Bool { arrived == nil || paused || reduceMotion }
+
     var body: some View {
+        TimelineView(.animation(paused: still)) { tl in
+            chart(at: tl.date)
+        }
+    }
+
+    private func chart(at now: Date) -> some View {
         let samples = points.map { p in let t = p.total; return Sample(date: p.date, down: Double(t.down), up: Double(t.up)) }
-        let end = samples.last?.date ?? Date()
+        // How far the newest step has slid in: 0 just after it arrived, 1
+        // once it sits at the right edge.
+        let progress = still ? 1 : min(1, max(0, now.timeIntervalSince(arrived ?? now) / Double(step)))
+        let end = (samples.last?.date ?? Date()).addingTimeInterval(-Double(step) * (1 - progress))
         let start = end.addingTimeInterval(-Double((size - 1) * step))
         let pick = selected.flatMap { s in samples.min { abs($0.date.timeIntervalSince(s)) < abs($1.date.timeIntervalSince(s)) } }
-        VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             Group {
                 if let p = pick {
                     Text("\(p.date.formatted(date: .omitted, time: .standard)) · Download **\(fmtRate(p.down))** · Upload **\(fmtRate(p.up))**")
@@ -262,6 +281,7 @@ struct LiveChart: View {
                 }
             }
             .chartXScale(domain: start...end)
+            .chartPlotStyle { $0.clipped() }
             .chartYScale(domain: 0...max(samples.map { max($0.down, $0.up) }.max() ?? 0, 1_000_000))
             .chartYAxis {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in
