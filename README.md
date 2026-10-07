@@ -15,8 +15,11 @@ The app is currently in beta testing. For an invite, email
 
 ## Features
 
-- **Dashboard:** peers online, traffic and the server's status at a glance.
-- **Peers:** add, edit, disable and delete peers. A new config is shown once,
+- **Dashboard:** whether this iPhone is behind the VPN, peers online, traffic
+  over 24 hours, 7 and 30 days, the server's status and uptime, and a notice
+  when a new GHOSTWIRE release is out.
+- **Live:** the speed of every peer right now, updated every 2 seconds.
+- **Peers:** search, filter and sort; add, edit, disable and delete peers. A new config is shown once,
   as a QR code for the WireGuard app or as a setup link. Issuing a new config
   rotates the peer's keys, so the old one stops working.
 - **Per peer:** traffic over 24 hours, 7 and 30 days, latency through the

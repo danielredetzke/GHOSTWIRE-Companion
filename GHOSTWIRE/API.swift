@@ -90,6 +90,19 @@ final class API {
         return data
     }
 
+    /// Opens a server-sent event stream; the caller reads its lines.
+    func events(_ path: String) async throws -> URLSession.AsyncBytes {
+        guard let url = URL(string: base + "/api/v1" + path) else { throw APIError.badPairing("The server address is not valid.") }
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let (bytes, resp) = try await session.bytes(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(code) else { throw APIError.server("The server answered with HTTP \(code).") }
+        return bytes
+    }
+
     func get<T: Decodable>(_ path: String) async throws -> T {
         try Self.decoder.decode(T.self, from: try await data("GET", path))
     }

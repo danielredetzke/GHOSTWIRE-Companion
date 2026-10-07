@@ -36,7 +36,7 @@ struct RootView: View {
 }
 
 struct MainTabView: View {
-    enum Tab: String { case dashboard, peers, server, settings }
+    enum Tab: String { case dashboard, live, peers, server, settings }
 
     @Environment(AppSession.self) private var session
     @State private var tab: Tab = {
@@ -52,6 +52,9 @@ struct MainTabView: View {
             DashboardView()
                 .tabItem { Label("Dashboard", systemImage: "square.grid.2x2") }
                 .tag(Tab.dashboard)
+            LiveView()
+                .tabItem { Label("Live", systemImage: "waveform.path.ecg") }
+                .tag(Tab.live)
             PeersView()
                 .tabItem { Label("Peers", systemImage: "person.2") }
                 .tag(Tab.peers)

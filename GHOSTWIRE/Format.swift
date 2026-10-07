@@ -17,6 +17,18 @@ nonisolated func fmtBytes(_ n: Int64) -> String {
     return s + " " + units[i]
 }
 
+/// Bits per second in decimal units, as the web UI shows them: "4.2 Mbit/s".
+nonisolated func fmtRate(_ bps: Double) -> String {
+    let units = ["bit/s", "kbit/s", "Mbit/s", "Gbit/s"]
+    var v = bps
+    var i = 0
+    while v >= 1000 && i < units.count - 1 {
+        v /= 1000
+        i += 1
+    }
+    return (i == 0 ? String(Int(v.rounded())) : String(format: "%.1f", v)) + " " + units[i]
+}
+
 func ago(_ date: Date?) -> String {
     guard let date else { return "never" }
     let s = max(0, Date().timeIntervalSince(date))

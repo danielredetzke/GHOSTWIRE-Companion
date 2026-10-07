@@ -44,6 +44,8 @@ struct PeersView: View {
     @State private var list: PeerList?
     @State private var query = ""
     @State private var filter = "all"
+    @State private var sort: PeerSort?
+    @State private var sortDesc = false
     @State private var error: String?
     @State private var adding = false
     @State private var deleting: Peer?
@@ -51,10 +53,12 @@ struct PeersView: View {
 
     private var filtered: [Peer] {
         let q = query.lowercased()
-        return (list?.peers ?? []).filter { p in
+        let peers = (list?.peers ?? []).filter { p in
             let hit = q.isEmpty || "\(p.name) \(p.ipv4) \(p.note)".lowercased().contains(q)
             return hit && (filter == "all" || PeerState(p).key == filter)
         }
+        guard let sort else { return peers }
+        return sort.sorted(peers, descending: sortDesc)
     }
 
     var body: some View {
@@ -104,7 +108,10 @@ struct PeersView: View {
             .searchable(text: $query, prompt: "Name, address or note")
             .navigationTitle("Peers")
             .toolbar {
-                Button { adding = true } label: { Label("Add peer", systemImage: "plus") }
+                ToolbarItem(placement: .topBarLeading) { sortMenu }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { adding = true } label: { Label("Add peer", systemImage: "plus") }
+                }
             }
             .navigationDestination(for: String.self) { PeerDetailView(peerID: $0) }
             .sheet(isPresented: $adding, onDismiss: { Task { await load() } }) { AddPeerView() }
@@ -127,6 +134,25 @@ struct PeersView: View {
                     await load()
                 }
             }
+        }
+    }
+
+    /// Choosing the current key again reverses the order, like the column
+    /// headers in the web interface.
+    private var sortMenu: some View {
+        Menu {
+            Button { sort = nil } label: {
+                if sort == nil { Label("Server order", systemImage: "checkmark") } else { Text("Server order") }
+            }
+            ForEach(PeerSort.allCases) { k in
+                Button {
+                    if sort == k { sortDesc.toggle() } else { sort = k; sortDesc = k.startsDescending }
+                } label: {
+                    if sort == k { Label(k.label, systemImage: sortDesc ? "chevron.down" : "chevron.up") } else { Text(k.label) }
+                }
+            }
+        } label: {
+            Label("Sort", systemImage: "arrow.up.arrow.down")
         }
     }
 
@@ -160,5 +186,74 @@ struct PeersView: View {
         } catch {
             session.alert = session.message(for: error)
         }
+    }
+}
+
+/// Sort keys of the peer list, as in the web interface's peers table.
+/// Numbers start descending, text ascending; peers without a value (no
+/// endpoint, no latency) always come last.
+enum PeerSort: String, CaseIterable, Identifiable {
+    case name, address, status, endpoint, latency, down, up, enabled
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .name: "Name"
+        case .address: "Address"
+        case .status: "Status"
+        case .endpoint: "Endpoint"
+        case .latency: "Latency"
+        case .down: "Download, 30 d"
+        case .up: "Upload, 30 d"
+        case .enabled: "Enabled"
+        }
+    }
+
+    var startsDescending: Bool { self == .down || self == .up }
+
+    private enum Value: Comparable {
+        case num(Double), text(String)
+    }
+
+    private static let stateOrder = ["online", "offline", "never", "setup", "nokey", "disabled"]
+
+    private func value(_ p: Peer) -> Value? {
+        switch self {
+        case .name: return .text(p.name.lowercased())
+        case .address:
+            return .num(p.ipv4.split(separator: ".").reduce(0.0) { $0 * 256 + (Double($1) ?? 0) })
+        case .status:
+            let key: String = switch PeerState(p) {
+            case .online: "online"
+            case .offline: "offline"
+            case .never: "never"
+            case .waiting: "setup"
+            case .noConfig: "nokey"
+            case .disabled: "disabled"
+            }
+            let order = Double(Self.stateOrder.firstIndex(of: key) ?? 0)
+            return .num(order * 1e13 - (p.stats.lastHandshake?.timeIntervalSince1970 ?? 0) * 1000)
+        case .endpoint:
+            guard !p.stats.endpoint.isEmpty else { return nil }
+            return .text((p.stats.location?.country ?? "~") + " " + p.stats.endpoint)
+        case .latency:
+            guard p.latencyCheck != "off", let ms = p.stats.latency?.ms else { return nil }
+            return .num(ms)
+        case .down: return .num(Double(p.stats.down30d))
+        case .up: return .num(Double(p.stats.up30d))
+        case .enabled: return .num(p.enabled ? 0 : 1)
+        }
+    }
+
+    func sorted(_ peers: [Peer], descending: Bool) -> [Peer] {
+        peers.map { ($0, value($0)) }.sorted { a, b in
+            switch (a.1, b.1) {
+            case let (x?, y?) where x != y: return descending ? x > y : x < y
+            case (.some, nil): return true
+            case (nil, .some): return false
+            default: return a.0.name.localizedCompare(b.0.name) == .orderedAscending
+            }
+        }.map(\.0)
     }
 }

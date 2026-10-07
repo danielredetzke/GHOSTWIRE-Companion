@@ -8,6 +8,7 @@ nonisolated struct Me: Decodable {
     let isAdmin: Bool
     let scope: String
     let version: String
+    let updateAvailable: String? // newer release, nil when up to date
 }
 
 nonisolated struct HealthCheck: Decodable, Hashable {
@@ -41,6 +42,47 @@ nonisolated struct Status: Decodable {
     let traffic24h: Traffic
     let traffic30d: Traffic
     let topPeer30d: String
+    let visitor: Visitor? // nil on servers before v0.9.0
+}
+
+/// Whether the device asking is behind the VPN. Behind it, websites see the
+/// server's address, so ip is then the server's.
+nonisolated struct Visitor: Decodable {
+    let `protected`: Bool
+    let ip: String
+    let serverIP: String  // empty when the endpoint does not resolve
+    let peer: PeerRef?    // the peer whose tunnel the request came through
+    let location: GeoInfo? // of ip, when not protected
+}
+
+nonisolated struct PeerRef: Decodable, Hashable {
+    let id: String
+    let name: String
+}
+
+/// The last minutes of speeds, from /live/stream. The first message holds
+/// the whole history, later ones one new step each.
+nonisolated struct LiveSpeeds: Decodable {
+    let step: Int  // seconds
+    let size: Int  // points the server keeps
+    let points: [SpeedPoint]
+}
+
+/// One step: per peer ID, download and upload in bits per second.
+nonisolated struct SpeedPoint: Decodable, Identifiable {
+    let t: Int64
+    let peers: [String: [Int64]]
+    var id: Int64 { t }
+    var date: Date { Date(timeIntervalSince1970: TimeInterval(t)) }
+
+    func rate(_ peerID: String) -> (down: Int64, up: Int64) {
+        guard let v = peers[peerID], v.count == 2 else { return (0, 0) }
+        return (v[0], v[1])
+    }
+
+    var total: (down: Int64, up: Int64) {
+        peers.values.reduce((Int64(0), Int64(0))) { a, v in v.count == 2 ? (a.0 + v[0], a.1 + v[1]) : a }
+    }
 }
 
 nonisolated struct StatPoint: Decodable, Identifiable, Hashable {
