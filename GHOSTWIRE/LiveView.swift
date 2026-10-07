@@ -39,6 +39,7 @@ struct LiveView: View {
             }
             .background(Color.gwGround)
             .navigationTitle("Live")
+            .serverToolbar()
             .toolbar {
                 Button { paused.toggle() } label: {
                     Label(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")

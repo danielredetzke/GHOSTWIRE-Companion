@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var confirmShrink = false
     @State private var confirmDisconnect = false
     @State private var confirmDecoy = false
+    @State private var serverName = ""
 
     private static let hourly: [(Int, String)] = [(24, "1 day"), (48, "2 days"), (168, "7 days"), (336, "14 days"), (744, "31 days")]
     private static let daily: [(Int, String)] = [(30, "30 days"), (90, "90 days"), (180, "6 months"), (400, "13 months"),
@@ -38,6 +39,7 @@ struct SettingsView: View {
             }
             .groundBackground()
             .navigationTitle("Settings")
+            .serverToolbar()
             .refreshable { await load() }
             .task { await load() }
             .alert("Restart to apply?", isPresented: $offerRestart) {
@@ -61,22 +63,35 @@ struct SettingsView: View {
             } message: {
                 Text("The web interface disappears right away and the server shows the decoy page instead. Turn it off here to get it back.")
             }
-            .confirmationDialog("Disconnect this iPhone?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
-                Button("Disconnect", role: .destructive) { session.disconnect() }
+            .confirmationDialog("Remove this server?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
+                Button("Remove \(session.current?.name ?? "server")", role: .destructive) {
+                    if let id = session.current?.id { session.remove(id) }
+                }
             } message: {
                 Text("The token is removed from this iPhone. Revoke it in the web interface too.")
             }
         }
     }
 
-    private var deviceSection: some View {
+    @ViewBuilder private var deviceSection: some View {
         Section {
             HStack {
                 Lockup(size: 40)
                 Spacer()
             }
             .padding(.vertical, 4)
-            LabeledContent("Server", value: session.pairing?.url ?? "–")
+            if let s = session.current {
+                LabeledContent("Name") {
+                    TextField("Name", text: $serverName)
+                        .multilineTextAlignment(.trailing)
+                        .submitLabel(.done)
+                        .onChange(of: serverName) { session.rename(s.id, to: serverName) }
+                        .onChange(of: s.name) { serverName = s.name }
+                        .onAppear { serverName = s.name }
+                        .accessibilityIdentifier("serverName")
+                }
+            }
+            LabeledContent("Address", value: session.pairing?.base ?? "–")
             if let me = session.me {
                 LabeledContent("Signed in as", value: "\(me.name) · \(me.scope == "ro" ? "read only" : "full access")")
                 LabeledContent("Server version", value: me.version)
@@ -84,8 +99,18 @@ struct SettingsView: View {
             if let fp = session.pairing?.fingerprint, !fp.isEmpty {
                 KV(key: "Pinned certificate (SHA-256)", value: fp, mono: true)
             }
+            Button("Remove this server…", role: .destructive) { confirmDisconnect = true }
+        } header: {
+            Text("This server")
+        } footer: {
+            Text("Removing deletes the token from this iPhone. Revoke it in the web interface too.")
+        }
+        Section {
+            Button { session.showServers = true } label: {
+                LabeledContent("Servers", value: "\(session.servers.count)")
+            }
+            .foregroundStyle(Color.gwText)
             LabeledContent("App version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
-            Button("Disconnect this iPhone…", role: .destructive) { confirmDisconnect = true }
         } header: {
             Text("This iPhone")
         }
@@ -238,7 +263,7 @@ struct SettingsView: View {
     }
 
     private func patch(_ body: [String: Any?]) async throws -> SettingsResult {
-        guard let api = session.api else { throw APIError.unauthorized }
+        guard let api = session.api else { throw APIError.unauthorized(nil) }
         return try await api.send("PATCH", "/settings", body)
     }
 

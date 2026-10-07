@@ -107,8 +107,9 @@ struct PeersView: View {
             .groundBackground()
             .searchable(text: $query, prompt: "Name, address or note")
             .navigationTitle("Peers")
+            .serverToolbar()
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { sortMenu }
+                ToolbarItem(placement: .topBarTrailing) { sortMenu }
                 ToolbarItem(placement: .primaryAction) {
                     Button { adding = true } label: { Label("Add peer", systemImage: "plus") }
                 }

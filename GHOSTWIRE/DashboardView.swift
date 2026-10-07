@@ -25,9 +25,7 @@ struct DashboardView: View {
             }
             .background(Color.gwGround)
             .navigationTitle("Dashboard")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { HannyaMark(size: 30) }
-            }
+            .serverToolbar()
             .navigationDestination(for: String.self) { PeerDetailView(peerID: $0) }
             .refreshable { await load() }
             .task {
@@ -151,6 +149,7 @@ struct DashboardView: View {
             async let st: StatsResponse = api.get("/stats?range=\(range)")
             let (a, b, c) = try await (s, p, st)
             status = a
+            if let id = api.server { session.report(a, for: id) }
             peers = b.peers
             if c.range == range { points = c.points }
             error = nil

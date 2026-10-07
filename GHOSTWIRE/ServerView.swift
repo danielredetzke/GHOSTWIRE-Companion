@@ -48,6 +48,7 @@ struct ServerView: View {
                 }
             }
             .navigationTitle("Server")
+            .serverToolbar()
             .safeAreaInset(edge: .bottom) { applyBar }
             .refreshable { await load() }
             .task { await load() }

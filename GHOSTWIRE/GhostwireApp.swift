@@ -21,12 +21,19 @@ struct RootView: View {
     var body: some View {
         @Bindable var session = session
         Group {
-            if session.api == nil {
-                PairingView()
+            if let s = session.current {
+                if session.revoked.contains(s.id) {
+                    RevokedView(server: s)
+                } else {
+                    // A new identity per server resets every tab's state,
+                    // polling and streams when switching.
+                    MainTabView().id(s.id)
+                }
             } else {
-                MainTabView()
+                PairingView()
             }
         }
+        .sheet(isPresented: $session.showServers) { ServersView() }
         .alert("GHOSTWIRE", isPresented: Binding(get: { session.alert != nil }, set: { if !$0 { session.alert = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -39,16 +46,10 @@ struct MainTabView: View {
     enum Tab: String { case dashboard, live, peers, server, settings }
 
     @Environment(AppSession.self) private var session
-    @State private var tab: Tab = {
-        #if DEBUG
-        // Development: `-tab peers` opens a tab directly.
-        if let t = UserDefaults.standard.string(forKey: "tab"), let tab = Tab(rawValue: t) { return tab }
-        #endif
-        return .dashboard
-    }()
 
     var body: some View {
-        TabView(selection: $tab) {
+        @Bindable var session = session
+        TabView(selection: $session.tab) {
             DashboardView()
                 .tabItem { Label("Dashboard", systemImage: "square.grid.2x2") }
                 .tag(Tab.dashboard)
@@ -65,6 +66,9 @@ struct MainTabView: View {
                 .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
                 .tag(Tab.settings)
         }
-        .task { await session.loadMe() }
+        .task {
+            await session.loadMe()
+            await session.probeAll()
+        }
     }
 }

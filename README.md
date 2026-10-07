@@ -28,6 +28,10 @@ The app is currently in beta testing. For an invite, email
   firewall options and client defaults; rotate the server key.
 - **Settings:** web interface, log level and data retention, the log viewer,
   and restarting the service.
+- **Several servers:** pair as many servers as you like and switch between
+  them from the server name at the top of every tab. The list shows whether
+  each server is reachable, how many peers are online, and which server this
+  iPhone's traffic goes out through.
 
 Users, passwords, API tokens, two-step sign-in, backup and restore are managed
 in the web interface only.
@@ -41,9 +45,12 @@ access or read only, and scan the QR code with the app. Without a camera, tap
 The pairing code holds the server address, the API token and, for a
 self-signed certificate, its SHA-256 fingerprint. The app accepts the server
 only if its certificate matches that fingerprint; Let's Encrypt certificates
-are checked normally. The pairing is stored in the iOS keychain on this device
-only. Settings → Disconnect this iPhone deletes it; revoke the token in the web
-interface too.
+are checked normally. Pairings are stored in the iOS keychain on this device
+only. To add another server, tap the server name at the top of any tab, then
+Add server. Pairing a server again replaces its token. Settings → Remove this
+server deletes its pairing; revoke the token in the web interface too. If a
+server revokes the token, the app offers to pair that server again or remove
+it; your other servers keep working.
 
 Keep the app up to date when you update the server: the app follows the
 server's API, and an older app build may not work with a newer server.

@@ -2,8 +2,11 @@ import SwiftUI
 import VisionKit
 
 /// First screen: pair with a server by scanning the QR code from the web
-/// interface (Settings → Pair iOS app) or by entering the details.
+/// interface (Settings → Pair iOS app) or by entering the details. As a
+/// sheet, it adds another server or pairs one again.
 struct PairingView: View {
+    var asSheet = false
+    var onDone: () -> Void = {}
     @Environment(AppSession.self) private var session
     @State private var scanning = false
     @State private var manual = false
@@ -11,6 +14,19 @@ struct PairingView: View {
     @State private var error: String?
 
     var body: some View {
+        if asSheet {
+            NavigationStack {
+                content
+                    .navigationTitle("Add server")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onDone) } }
+            }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 24) {
             Spacer()
             HannyaMark(size: 96)
@@ -52,7 +68,7 @@ struct PairingView: View {
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { scanning = false } } }
             }
         }
-        .sheet(isPresented: $manual) { ManualPairingView() }
+        .sheet(isPresented: $manual) { ManualPairingView(onDone: onDone) }
     }
 
     private func pair(_ code: String) async {
@@ -60,6 +76,7 @@ struct PairingView: View {
         defer { busy = false }
         do {
             try await session.pair(try Pairing.parse(code))
+            onDone()
         } catch {
             self.error = error.localizedDescription
         }
@@ -67,6 +84,7 @@ struct PairingView: View {
 }
 
 struct ManualPairingView: View {
+    var onDone: () -> Void = {}
     @Environment(AppSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var code = ""
@@ -131,6 +149,7 @@ struct ManualPairingView: View {
             }
             try await session.pair(p)
             dismiss()
+            onDone()
         } catch {
             self.error = error.localizedDescription
         }

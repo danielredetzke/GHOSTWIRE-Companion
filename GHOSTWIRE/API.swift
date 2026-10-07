@@ -3,13 +3,13 @@ import Foundation
 
 enum APIError: LocalizedError {
     case server(String)
-    case unauthorized
+    case unauthorized(UUID?) // the server whose token was refused
     case badPairing(String)
 
     var errorDescription: String? {
         switch self {
         case .server(let m): m
-        case .unauthorized: "This iPhone is no longer paired. Pair it again from Settings → Pair iOS app in the web interface."
+        case .unauthorized: "This server no longer accepts this iPhone. Pair it again from Settings → Pair iOS app in the web interface."
         case .badPairing(let m): m
         }
     }
@@ -44,16 +44,16 @@ nonisolated final class PinningDelegate: NSObject, URLSessionDelegate, Sendable 
 /// Client for GHOSTWIRE's /api/v1, authenticated with the paired API token.
 final class API {
     let base: String
+    let server: UUID? // nil while pairing
     private let token: String
     private let session: URLSession
 
-    init(pairing p: Pairing) {
-        var url = p.url.trimmingCharacters(in: .whitespacesAndNewlines)
-        while url.hasSuffix("/") { url.removeLast() }
-        base = url
+    init(pairing p: Pairing, server: UUID? = nil, timeout: TimeInterval = 15) {
+        base = p.base
+        self.server = server
         token = p.token
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 15
+        cfg.timeoutIntervalForRequest = timeout
         session = URLSession(configuration: cfg, delegate: PinningDelegate(fingerprint: p.fingerprint), delegateQueue: nil)
     }
 
@@ -82,7 +82,7 @@ final class API {
         }
         let (data, resp) = try await session.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        if code == 401 { throw APIError.unauthorized }
+        if code == 401 { throw APIError.unauthorized(server) }
         guard (200..<300).contains(code) else {
             let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             throw APIError.server(obj?["error"] as? String ?? "The server answered with HTTP \(code).")
@@ -98,7 +98,7 @@ final class API {
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         let (bytes, resp) = try await session.bytes(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-        if code == 401 { throw APIError.unauthorized }
+        if code == 401 { throw APIError.unauthorized(server) }
         guard (200..<300).contains(code) else { throw APIError.server("The server answered with HTTP \(code).") }
         return bytes
     }
