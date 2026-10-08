@@ -14,7 +14,7 @@ Copy these into App Store Connect. Fields marked **[YOU]** need your input.
 | Secondary category | Developer Tools |
 | Age rating | 4+ (answer "None" to every question) |
 | Price | **[YOU]** (free suggested) |
-| Support URL | **[YOU]** e.g. https://git.redetzke.aero/Redetzke/GHOSTWIRE |
+| Support URL | **[YOU]** e.g. https://github.com/danielredetzke/GHOSTWIRE |
 | Privacy policy URL | **[YOU]** host the text from "Privacy policy" below |
 | Copyright | **[YOU]** e.g. 2026 Daniel Redetzke |
 
