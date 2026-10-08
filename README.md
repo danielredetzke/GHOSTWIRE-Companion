@@ -1,6 +1,6 @@
 # GHOSTWIRE Companion
 
-The iPhone app for [GHOSTWIRE](https://git.redetzke.aero/Redetzke/GHOSTWIRE),
+The iPhone app for [GHOSTWIRE](https://github.com/danielredetzke/GHOSTWIRE),
 the self-hosted WireGuard server manager. It talks to your GHOSTWIRE server's
 JSON API with an API token: no cloud service, no account, no tracking.
 
