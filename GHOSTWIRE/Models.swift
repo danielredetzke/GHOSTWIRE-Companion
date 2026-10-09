@@ -236,6 +236,9 @@ nonisolated struct PeerOnly: Decodable {
     let peer: Peer
 }
 
+/// The DNS preset the web interface offers.
+let quad9DNS = ["9.9.9.9", "149.112.112.112"]
+
 nonisolated struct ClientDefaults: Codable, Equatable {
     var dns: [String]
     var allowedIPs: [String]
@@ -311,11 +314,51 @@ nonisolated struct GeoStatus: Decodable {
     let updated: Date?
 }
 
+/// The DNS servers GHOSTWIRE uses for its own lookups. No servers: the
+/// system resolver.
+nonisolated struct DNSSettings: Decodable, Equatable {
+    var servers: [String]
+    var fallback: Bool    // ask the system resolver when none of the servers answers
+    var system: [String]  // the nameservers in /etc/resolv.conf
+}
+
+/// What the DNS Test button found.
+nonisolated struct DNSTestResult: Decodable {
+    let name: String
+    let answer: String
+    let ms: Int
+    let server: String
+}
+
+nonisolated struct Release: Decodable {
+    let version: String
+    let published: Date
+    let notes: String // Markdown
+    let url: String
+}
+
+/// The daily release check, as the settings and POST /updates/check show it.
+nonisolated struct UpdateStatus: Decodable {
+    let enabled: Bool
+    let current: String
+    let latest: Release?
+    let available: Bool
+    let checked: Date?
+    let error: String?
+    let lastOk: Date?
+    let arch: String      // empty when no release file is built for the server
+    let file: String?
+    let fileUrl: String?
+    let sumsUrl: String?
+}
+
 nonisolated struct AppSettings: Decodable {
     var web: WebSettings
     var log: LogSettings
     var stats: StatsSettings
     var decoy: DecoySettings? // nil on servers without the decoy
+    var dns: DNSSettings?     // nil on servers before v0.11.0
+    var updates: UpdateStatus?
     var fingerprint: String
     var logPath: String
     var geo: GeoStatus?

@@ -172,11 +172,51 @@ struct AddPeerView: View {
 
             HandoverSection(h: $handover)
 
+            Section {
+                Text(preview(server))
+                    .font(.mono(.caption2))
+                    .foregroundStyle(Color(hex: 0xE6E6E1))
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(hex: 0x16171A), in: RoundedRectangle(cornerRadius: 10))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            } header: {
+                Text("Client config preview")
+            } footer: {
+                Text(handover.link
+                     ? "With a setup link, keys are created when the recipient opens it. Until then the peer is inactive."
+                     : "Keys are created when you tap Create. Then the config can be scanned or shared once.")
+            }
+
             if let error {
                 Section { Text(error).foregroundStyle(Color.gwErrInk) }
             }
         }
         .groundBackground()
+    }
+
+    /// The config the device will get, with placeholders for what is made
+    /// on create, like the web interface's preview.
+    private func preview(_ s: ServerConfig) -> String {
+        let made = handover.link ? "‹made when the link is opened›" : "‹generated on create›"
+        let o = (try? overrides.body(server: s)) ?? [:]
+        let d = s.clientDefaults
+        let ip = ipv4.trimmingCharacters(in: .whitespaces)
+        let bits = s.ipv4.split(separator: "/").last.map(String.init) ?? ""
+        var lines = ["[Interface]", "PrivateKey = " + made,
+                     "Address = " + (ip.isEmpty ? "‹next free›" : ip) + "/" + bits + (s.ipv6Enabled ? ",‹mapped IPv6›" : "")]
+        let dns = (o["dns"] ?? nil) as? [String] ?? d.dns
+        if !dns.isEmpty { lines.append("DNS = " + dns.joined(separator: ", ")) }
+        lines += ["", "[Peer]", "PublicKey = " + s.publicKey]
+        if psk { lines.append("PresharedKey = " + made) }
+        lines.append("Endpoint = " + (s.endpoint.isEmpty ? "‹set the endpoint in Server›" : s.endpoint) + ":"
+                     + String(s.endpointPort != 0 ? s.endpointPort : s.listenPort))
+        lines.append("AllowedIPs = " + ((o["allowedIPs"] ?? nil) as? [String] ?? d.allowedIPs).joined(separator: ", "))
+        let k = (o["keepalive"] ?? nil) as? Int ?? d.keepalive
+        if k > 0 { lines.append("PersistentKeepalive = " + String(k)) }
+        return lines.joined(separator: "\n")
     }
 
     private func create() async {

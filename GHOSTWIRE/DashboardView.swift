@@ -53,7 +53,7 @@ struct DashboardView: View {
         }
 
         if let me = session.me, let v = me.updateAvailable, v != hiddenUpdate {
-            UpdateBanner(available: v, current: me.version) { hiddenUpdate = v }
+            UpdateBanner(available: v, current: me.version, howTo: { session.tab = .settings }) { hiddenUpdate = v }
         }
 
         // A Grid (not LazyVGrid) gives both tiles of a row the same height.
@@ -243,6 +243,7 @@ struct VisitorCard: View {
 struct UpdateBanner: View {
     let available: String
     let current: String
+    let howTo: () -> Void
     let hide: () -> Void
 
     var body: some View {
@@ -250,7 +251,11 @@ struct UpdateBanner: View {
             Text("**GHOSTWIRE \(available) is available.** You're on v\(current.hasPrefix("v") ? String(current.dropFirst()) : current). Update it on the server; VPN connections stay up.")
                 .font(.footnote)
                 .foregroundStyle(Color.gwText)
-            Button("Hide until the next version", action: hide).font(.footnote.weight(.medium))
+            HStack(spacing: 16) {
+                Button("How to update", action: howTo)
+                Button("Hide until the next version", action: hide)
+            }
+            .font(.footnote.weight(.medium))
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

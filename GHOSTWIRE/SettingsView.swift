@@ -7,6 +7,13 @@ struct SettingsView: View {
     @State private var log: LogSettings?
     @State private var stats: StatsSettings?
     @State private var decoy: DecoySettings?
+    @State private var dns: DNSDraft?
+    @State private var dnsResult: String?
+    @State private var dnsError: String?
+    @State private var testingDNS = false
+    @State private var updates: UpdateStatus?
+    @State private var checking = false
+    @State private var copiedCommands = false
     @State private var error: String?
     @State private var busy = false
     @State private var offerRestart = false
@@ -27,8 +34,10 @@ struct SettingsView: View {
                 if let error {
                     Section { Text(error).foregroundStyle(Color.gwErrInk) }
                 }
+                if let updates { updatesSection(updates) }
                 if web != nil { webSection }
                 if decoy != nil { decoySection }
+                if dns != nil { dnsSection }
                 if log != nil, stats != nil { retentionSection }
                 if log != nil { logSection }
                 Section {
@@ -188,6 +197,197 @@ struct SettingsView: View {
         }
     }
 
+    /// The DNS form: system resolver, or servers of its own with an
+    /// optional fallback.
+    struct DNSDraft: Equatable {
+        var custom: Bool
+        var servers: String
+        var fallback: Bool
+
+        init(_ d: DNSSettings) {
+            custom = !d.servers.isEmpty
+            servers = (d.servers.isEmpty ? quad9DNS : d.servers).joined(separator: ", ")
+            fallback = d.fallback
+        }
+
+        var list: [String] {
+            custom ? servers.split(whereSeparator: { $0 == "," || $0.isWhitespace }).map(String.init) : []
+        }
+
+        var body: [String: Any] { ["servers": list, "fallback": fallback] }
+    }
+
+    private var dnsSection: some View {
+        let d = Binding(get: { dns! }, set: { dns = $0; dnsResult = nil; dnsError = nil })
+        let system = settings?.dns?.system ?? []
+        let saved = settings?.dns
+        let unchanged = saved.map { $0.servers == dns!.list && $0.fallback == dns!.fallback } ?? true
+        return Section {
+            Picker("Lookups", selection: d.custom) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("System resolver")
+                    Text("From /etc/resolv.conf: " + (system.isEmpty ? "none found" : system.joined(separator: ", ")))
+                        .font(.caption).foregroundStyle(Color.gwText2)
+                }
+                .tag(false)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("These servers")
+                    Text("Ignores the system settings for GHOSTWIRE only").font(.caption).foregroundStyle(Color.gwText2)
+                }
+                .tag(true)
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+            if dns!.custom {
+                Picker("DNS provider", selection: Binding(
+                    get: { dns!.list == quad9DNS ? "quad9" : "custom" },
+                    set: { d.wrappedValue.servers = $0 == "quad9" ? quad9DNS.joined(separator: ", ") : "" }
+                )) {
+                    Text("Quad9").tag("quad9")
+                    Text("Custom").tag("custom")
+                }
+                LabeledContent("DNS servers") {
+                    TextField("9.9.9.9, 149.112.112.112", text: d.servers)
+                        .font(.mono(.footnote))
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numbersAndPunctuation)
+                }
+                Toggle(isOn: d.fallback) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Fall back to the system resolver")
+                        Text("Only when none of these servers answers. Off: lookups fail instead")
+                            .font(.caption).foregroundStyle(Color.gwText2)
+                    }
+                }
+            }
+            if let dnsResult {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Circle().fill(Color.gwGood).frame(width: 8, height: 8)
+                    Text(dnsResult).font(.footnote)
+                }
+            }
+            if let dnsError {
+                Text(dnsError).font(.footnote).foregroundStyle(Color.gwErrInk)
+            }
+            Button(testingDNS ? "Looking up api.github.com…" : "Test") { Task { await testDNS() } }
+                .disabled(testingDNS)
+            Button("Save DNS") { Task { await saveDNS() } }
+                .disabled(busy || unchanged)
+        } header: {
+            Text("DNS")
+        } footer: {
+            Text("How GHOSTWIRE looks up names: update check, geo databases, Let's Encrypt and public IP detection. Other programs on the server and the DNS in device configs (set under Server) are not affected. Applies immediately.")
+        }
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+    }
+
+    private func updatesSection(_ st: UpdateStatus) -> some View {
+        Section {
+            LabeledContent("Running", value: "v" + String(st.current.trimmingPrefix("v")))
+            if let rel = st.latest {
+                LabeledContent("Latest release") {
+                    Text(rel.version).foregroundStyle(st.available ? Color.gwDown : Color.gwText2)
+                        .fontWeight(st.available ? .semibold : .regular)
+                }
+            }
+            LabeledContent("This server", value: st.arch.isEmpty ? "No release file for this platform" : "Linux · " + st.arch)
+            if st.enabled, let e = st.error, !e.isEmpty {
+                Text("The last check failed: \(e)." + (st.lastOk.map { " Last worked " + ago($0) + "." } ?? ""))
+                    .font(.footnote)
+                    .foregroundStyle(Color.gwErrInk)
+            }
+            if let rel = st.latest {
+                if st.available {
+                    releaseNotes(rel)
+                    if let cmds = updateCommands(st) {
+                        updateCommandsView(cmds)
+                        Button(copiedCommands ? "Copied" : "Copy commands") {
+                            UIPasteboard.general.string = cmds
+                            copiedCommands = true
+                        }
+                    } else {
+                        HStack(spacing: 4) {
+                            Text("No release file is built for this platform.")
+                            if let url = URL(string: rel.url) { Link("See the release", destination: url).underline() }
+                        }
+                        .font(.footnote)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Circle().fill(Color.gwGood).frame(width: 8, height: 8)
+                        Text("GHOSTWIRE is up to date.")
+                    }
+                }
+            }
+            Toggle(isOn: Binding(get: { st.enabled }, set: { on in Task { await saveUpdateCheck(on) } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Check for updates once a day")
+                    Text("Asks github.com for the latest release. Nothing about this server is sent.")
+                        .font(.caption).foregroundStyle(Color.gwText2)
+                }
+            }
+            .disabled(checking)
+            if st.enabled {
+                Button(checking ? "Checking…" : "Check now") { Task { await checkNow() } }
+                    .disabled(checking)
+            }
+        } header: {
+            HStack {
+                Text("Updates")
+                Spacer()
+                if st.enabled { Text(st.checked.map { "Last checked " + ago($0) } ?? "Not checked yet") }
+            }
+        }
+    }
+
+    private func releaseNotes(_ rel: Release) -> some View {
+        let notes = ReleaseSummary(rel.notes)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("What's new in \(rel.version)").font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                Text("Released " + fmtDate(rel.published))
+                if let url = URL(string: rel.url) { Link("Full notes on GitHub", destination: url).underline() }
+            }
+            .font(.caption)
+            .foregroundStyle(Color.gwText2)
+            if notes.summary.range(of: "security", options: .caseInsensitive) != nil {
+                Notice(text: "Includes security fixes.")
+            }
+            if !notes.summary.isEmpty { Text(inlineMarkdown(notes.summary)).font(.footnote) }
+            ForEach(Array(notes.items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("•")
+                    Text(inlineMarkdown(item))
+                }
+                .font(.footnote)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func updateCommandsView(_ cmds: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Update this server").font(.subheadline.weight(.semibold))
+            Text("Run on the server. VPN connections stay up.").font(.caption).foregroundStyle(Color.gwText2)
+            Text(cmds)
+                .font(.mono(.caption2))
+                .foregroundStyle(Color(hex: 0xE6E6E1))
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: 0x16171A), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// The commands the web interface shows for updating this server.
+    private func updateCommands(_ st: UpdateStatus) -> String? {
+        guard st.available, let file = st.file, let fileUrl = st.fileUrl, let sumsUrl = st.sumsUrl else { return nil }
+        return ["curl -fLO " + fileUrl, "curl -fLO " + sumsUrl, "sha256sum -c --ignore-missing SHA256SUMS",
+                "chmod +x " + file, "sudo ./" + file + " update"].joined(separator: "\n")
+    }
+
     private var retentionSection: some View {
         let l = Binding(get: { log! }, set: { log = $0 })
         let s = Binding(get: { stats! }, set: { stats = $0 })
@@ -256,6 +456,10 @@ struct SettingsView: View {
             log = s.log
             stats = s.stats
             decoy = s.decoy
+            dns = s.dns.map(DNSDraft.init)
+            dnsResult = nil
+            dnsError = nil
+            updates = s.updates
             error = nil
         } catch {
             self.error = session.message(for: error)
@@ -326,6 +530,64 @@ struct SettingsView: View {
         }
     }
 
+    private func testDNS() async {
+        guard let api = session.api, let dns else { return }
+        testingDNS = true
+        defer { testingDNS = false }
+        dnsResult = nil
+        dnsError = nil
+        do {
+            let r: DNSTestResult = try await api.send("POST", "/dns/test", dns.body.mapValues { $0 as Any? })
+            dnsResult = "\(r.name) → \(r.answer) in \(r.ms) ms, answered by \(r.server)"
+        } catch {
+            dnsError = session.message(for: error)
+        }
+    }
+
+    private func saveDNS() async {
+        guard let dns else { return }
+        busy = true
+        defer { busy = false }
+        dnsError = nil
+        do {
+            _ = try await patch(["dns": dns.body])
+            settings?.dns?.servers = dns.list
+            settings?.dns?.fallback = dns.fallback
+        } catch {
+            dnsError = session.message(for: error)
+        }
+    }
+
+    private func checkNow() async {
+        guard let api = session.api else { return }
+        checking = true
+        defer { checking = false }
+        copiedCommands = false
+        do {
+            updates = try await api.send("POST", "/updates/check")
+            // The dashboard's update notice comes from /auth/me.
+            if let m: Me = try? await api.get("/auth/me") { session.me = m }
+        } catch {
+            self.error = session.message(for: error)
+        }
+    }
+
+    private func saveUpdateCheck(_ on: Bool) async {
+        guard let api = session.api else { return }
+        do {
+            _ = try await patch(["updates": ["check": on]])
+            if on {
+                await checkNow()
+            } else {
+                let s: AppSettings = try await api.get("/settings")
+                updates = s.updates
+                if let m: Me = try? await api.get("/auth/me") { session.me = m }
+            }
+        } catch {
+            self.error = session.message(for: error)
+        }
+    }
+
     private func restart() async {
         guard let api = session.api else { return }
         _ = try? await api.data("POST", "/restart")
@@ -335,29 +597,44 @@ struct SettingsView: View {
 
 struct LogView: View {
     @Environment(AppSession.self) private var session
+    @State private var show = ""  // "" (by level) | "audit" (changes) | "dns" (DNS queries)
     @State private var level = "all"
     @State private var lines: [String] = []
     @State private var error: String?
+    @State private var sharing = false
+    @State private var logFile: URL?
 
     var body: some View {
         List {
             Section {
-                Picker("Level", selection: $level) {
-                    Text("All").tag("all")
-                    Text("Info").tag("info")
-                    Text("Warn").tag("warn")
-                    Text("Error").tag("error")
+                Picker("Show", selection: $show) {
+                    Text("All").tag("")
+                    Text("Changes only").tag("audit")
+                    Text("DNS").tag("dns")
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                if show.isEmpty {
+                    Picker("Level", selection: $level) {
+                        Text("All levels").tag("all")
+                        Text("Info").tag("info")
+                        Text("Warn").tag("warn")
+                        Text("Error").tag("error")
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                    .listRowSeparator(.hidden)
+                }
             }
             if let error {
                 Section { Text(error).foregroundStyle(Color.gwErrInk) }
             }
             Section {
                 if lines.isEmpty && error == nil {
-                    Text("No entries at this level.").foregroundStyle(Color.gwText2)
+                    Text(emptyText).foregroundStyle(Color.gwText2)
                 }
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
@@ -365,21 +642,47 @@ struct LogView: View {
                         .textSelection(.enabled)
                 }
             } footer: {
-                Text("Newest first.")
+                Text("Newest first, up to 500 entries. Share the log file for all of it.")
             }
         }
         .groundBackground()
         .navigationTitle("Log")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { Task { await shareFile() } } label: {
+                    if sharing { ProgressView() } else { Label("Share log file", systemImage: "square.and.arrow.up") }
+                }
+                .disabled(sharing)
+            }
+        }
+        .sheet(isPresented: Binding(get: { logFile != nil }, set: { if !$0 { logFile = nil } })) {
+            if let logFile {
+                ActivitySheet(items: [logFile])
+                    .presentationDetents([.medium, .large])
+                    .ignoresSafeArea()
+            }
+        }
+        .onChange(of: show) { Task { await load() } }
         .onChange(of: level) { Task { await load() } }
         .refreshable { await load() }
         .task { await load() }
     }
 
+    private var emptyText: String {
+        switch show {
+        case "audit": "No changes in the log yet."
+        case "dns": "No DNS queries in the log yet."
+        default: "No entries at this level."
+        }
+    }
+
     private func load() async {
         guard let api = session.api else { return }
+        // Changes and DNS queries are shown at every level, like the web interface.
+        let query = show.isEmpty ? "level=\(level)" : "level=all&\(show)=1"
         do {
-            let data = try await api.data("GET", "/logs?limit=200&level=\(level)")
+            let data = try await api.data("GET", "/logs?limit=500&" + query)
             let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             let recs = obj?["lines"] as? [[String: Any]] ?? []
             lines = recs.map(formatLogLine)
@@ -388,4 +691,30 @@ struct LogView: View {
             self.error = session.message(for: error)
         }
     }
+
+    /// Downloads the current log file and opens the share sheet with it.
+    private func shareFile() async {
+        guard let api = session.api else { return }
+        sharing = true
+        defer { sharing = false }
+        do {
+            let data = try await api.data("GET", "/logs/download")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("GHOSTWIRE.jsonl")
+            try data.write(to: url, options: .atomic)
+            logFile = url
+        } catch {
+            session.alert = session.message(for: error)
+        }
+    }
+}
+
+/// The system share sheet, for files the app downloads first.
+struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

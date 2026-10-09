@@ -97,7 +97,7 @@ func formatLogLine(_ rec: [String: Any]) -> String {
     }
     let level = (rec["level"] as? String ?? "").padding(toLength: 5, withPad: " ", startingAt: 0)
     let msg = rec["msg"] as? String ?? ""
-    let rest = rec.keys.filter { !["time", "level", "msg", "audit"].contains($0) }.sorted().map { k -> String in
+    let rest = rec.keys.filter { !["time", "level", "msg", "audit", "dns"].contains($0) }.sorted().map { k -> String in
         let v = rec[k]
         if let s = v as? String { return "\(k)=\(s)" }
         if let v, let d = try? JSONSerialization.data(withJSONObject: v, options: [.fragmentsAllowed]), let s = String(data: d, encoding: .utf8) {
@@ -106,4 +106,42 @@ func formatLogLine(_ rec: [String: Any]) -> String {
         return "\(k)=?"
     }.joined(separator: " ")
     return "\(ts)  \(level)  \(msg)" + (rest.isEmpty ? "" : "  " + rest)
+}
+
+/// The opening paragraph and the first bullet list of release notes, like
+/// the web interface shows them; the full notes are a link away.
+struct ReleaseSummary {
+    let summary: String
+    let items: [String]
+
+    init(_ markdown: String) {
+        let lines = markdown.replacingOccurrences(of: "\r", with: "").components(separatedBy: "\n")
+        var para: [String] = []
+        for l in lines {
+            let t = l.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty {
+                if !para.isEmpty { break }
+                continue
+            }
+            if ["#", "- ", "* ", "```", "|"].contains(where: l.hasPrefix) { break }
+            para.append(t)
+        }
+        var items: [String] = []
+        var started = false
+        for l in lines {
+            if l.hasPrefix("- ") || l.hasPrefix("* ") {
+                started = true
+                items.append(String(l.dropFirst(2)))
+            } else if started && !l.trimmingCharacters(in: .whitespaces).isEmpty {
+                break
+            }
+        }
+        summary = para.joined(separator: " ")
+        self.items = items
+    }
+}
+
+/// **Bold**, `code` and links of one line of Markdown.
+func inlineMarkdown(_ s: String) -> AttributedString {
+    (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
 }

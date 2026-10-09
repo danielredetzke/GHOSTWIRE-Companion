@@ -18,7 +18,6 @@ struct ServerView: View {
         ("lanAccess", "LAN access"), ("openPort", "Open port"), ("clientDefaults", "Client defaults"),
     ]
     private static let disruptive: Set<String> = ["listenPort", "ipv4", "ipv6", "ipv6Enabled"]
-    private static let quad9 = ["9.9.9.9", "149.112.112.112"]
 
     private func dict(_ c: ServerConfig) -> [String: Any] {
         guard let data = try? JSONEncoder().encode(c),
@@ -125,8 +124,8 @@ struct ServerView: View {
 
             Section {
                 Picker("DNS provider", selection: Binding(
-                    get: { draft!.clientDefaults.dns == Self.quad9 ? "quad9" : "custom" },
-                    set: { if $0 == "quad9" { draft!.clientDefaults.dns = Self.quad9 } }
+                    get: { draft!.clientDefaults.dns == quad9DNS ? "quad9" : "custom" },
+                    set: { if $0 == "quad9" { draft!.clientDefaults.dns = quad9DNS } }
                 )) {
                     Text("Quad9").tag("quad9")
                     Text("Custom").tag("custom")
